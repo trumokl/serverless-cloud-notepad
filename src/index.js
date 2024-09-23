@@ -14,6 +14,110 @@ router.get('/', ({ url }) => {
     return Response.redirect(`${url}${newHash}`, 302)
 })
 
+// 处理 /list 路由，增加分页和密码验证功能
+router.get('/list', async (request) => {
+    const lang = getI18n(request);  // 获取语言信息
+    const PASSWORD = 'xuhao';  // 设置访问 /list 的密码
+    const query = new URL(request.url).searchParams;
+    const password = query.get('password');  // 获取传入的密码参数
+
+    // 如果没有输入密码或密码错误，直接使用 /:path 的逻辑
+    if (!password || password !== PASSWORD) {
+        const path = 'list';  // 将 /list 视为名为 "list" 的路径
+        const cookie = Cookies.parse(request.headers.get('Cookie') || '');
+        
+        const { value, metadata } = await queryNote(path);  // 获取名为 'list' 的笔记
+        if (!metadata.pw) {
+            return returnPage('Edit', {
+                lang,
+                title: decodeURIComponent(path),
+                content: value,
+                ext: metadata,
+            });
+        }
+
+        const valid = await checkAuth(cookie, path);  // 验证用户是否已通过身份验证
+        if (valid) {
+            return returnPage('Edit', {
+                lang,
+                title: decodeURIComponent(path),
+                content: value,
+                ext: metadata,
+            });
+        }
+
+        return returnPage('NeedPasswd', { lang, title: decodeURIComponent(path) });  // 显示密码输入页面
+    }
+
+    // 处理分页逻辑（如果密码正确）
+    const page = parseInt(query.get('page')) || 1;
+    const limit = parseInt(query.get('limit')) || 10;
+    const offset = (page - 1) * limit;
+
+    // 获取所有笔记的键
+    const keys = await NOTES.list();
+    
+    // 分页处理
+    const paginatedKeys = keys.keys.slice(offset, offset + limit);
+
+    // 生成表格行，每行显示每个键的所有字段信息
+    const rows = paginatedKeys.map(key => `
+      <tr>
+        <td><a href="/${key.name}">${key.name}</a></td>
+        <td>${key.metadata ? (() => {
+            const date = new Date(key.metadata.updateAt * 1000);
+            const pad = num => num.toString().padStart(2, '0');
+            return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
+        })() : 'N/A'}</td>
+      </tr>
+    `).join('');
+
+    // 生成分页导航
+    const totalPages = Math.ceil(keys.keys.length / limit);
+    const pagination = `
+      <div style="margin-top: 20px;">
+        ${page > 1 ? `<a href="/list?page=${page - 1}&limit=${limit}&password=${password}">上一页</a>` : ''}
+        ${page < totalPages ? `<a href="/list?page=${page + 1}&limit=${limit}&password=${password}" style="margin-left: 10px;">下一页</a>` : ''}
+      </div>
+    `;
+
+    // 生成包含表格的HTML
+    const html = `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Note List</title>
+          <style>
+            body { font-family: Arial, sans-serif; padding: 20px; }
+            table { width: 100%; border-collapse: collapse; }
+            th, td { padding: 10px; border: 1px solid #ddd; text-align: left; }
+            th { background-color: #f4f4f4; }
+          </style>
+        </head>
+        <body>
+          <h1>Note List</h1>
+          <table>
+            <thead>
+              <tr>
+                <th>Note Link</th>
+                <th>Modify Time</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${rows}
+            </tbody>
+          </table>
+          ${pagination}
+        </body>
+      </html>`;
+
+    return new Response(html, {
+        headers: { 'Content-Type': 'text/html' },
+    });
+});
+
+
+
 router.get('/share/:md5', async (request) => {
     const lang = getI18n(request)
     const { md5 } = request.params
