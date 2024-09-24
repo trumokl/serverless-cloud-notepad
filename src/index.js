@@ -17,7 +17,7 @@ router.get('/', ({ url }) => {
 // 处理 /list 路由，增加分页和密码验证功能
 router.get('/list', async (request) => {
     const lang = getI18n(request);  // 获取语言信息
-    const PASSWORD = 'xuhao';  // 设置访问 /list 的密码
+    const PASSWORD = 'password';  // 设置访问 /list 的密码
     const query = new URL(request.url).searchParams;
     const password = query.get('password');  // 获取传入的密码参数
 
